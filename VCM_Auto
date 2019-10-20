@@ -1,0 +1,74 @@
+function fillTemplate(sheetName) {
+  
+  SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Form Responses 1").activate();
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();  // Get main Database Sheet
+  var lrow = sheet.getLastRow();   // User which last filled the form
+
+  var keys = sheet.getRange(1, 1, 1, sheet.getMaxColumns()).getValues()[0];
+  var array = sheet.getRange(lrow, 1, 1, sheet.getMaxColumns()).getValues()[0];
+  
+  var template = "https://docs.google.com/document/d/1amRBts6Z2BVRs5WpMFd7BVgAruiAThimuEIhylIZ0Cc/edit"
+  var doc = DocumentApp.openByUrl(template);
+  var copyFile = DriveApp.getFileById(doc.getId()).makeCopy("Test copy"),
+      copy = DocumentApp.openById(copyFile.getId()),
+      copybody = copy.getBody();
+  
+  for(var i=0; i < keys.length; i++) {
+    if (keys[i] == 'Client Image') {
+      replaceImage(copybody, '{{Client Image}}', array[i], 200);
+    }
+    else if (keys[i] == '') break;
+    else { 
+      if (keys[i] == 'Client Name') {
+        var clientName = array[i];
+        copy.setName('Client Profile: ' + array[i]); 
+      }
+        copybody.replaceText('{{'+keys[i]+'}}', array[i]); 
+    }
+  }
+
+  copy.saveAndClose();
+
+  var newFile = DriveApp.createFile(copy.getBlob().getAs('application/pdf'));
+  copyFile.setTrashed(true);
+  
+  var TARGET_FOLDER = '0B-197wRs16pbfnB5SHR2OTZIaDBuUTNLeTBwQUhkcVN2Z1ZIRmNLRDZIUUx0dXB6MDZXeWM'
+  var targetFolder = DriveApp.getFolderById(TARGET_FOLDER);
+  targetFolder.addFile(newFile);
+  
+  sendAutomatedEmail(clientName, newFile, SpreadsheetApp.getActiveSpreadsheet());
+
+}
+
+function sendAutomatedEmail(clientName, pdf, sheet) {
+  var emailsheet = sheet.getSheetByName("Admin Emails");  // Get Sheet with the Email Content
+  var emails = emailsheet.getRange(1, 1, emailsheet.getLastRow(), 1).getValues();
+  var body = "Hello MSP Admin,\n A new client application has been submitted for " + clientName + ". Please look over the auto-generated report and update the status to either active or declined here: " + sheet.getUrl(); 
+  for(i = 1; i < emails.length; i++) {
+    MailApp.sendEmail(emails[i], "[MSP] New Client Profile Submitted - " + clientName, body, {name: 'Client Profile Report', attachments: [pdf]});    // Send email to email entered by the user
+  }
+}
+
+function replaceImage(body, searchText, image, width) {
+  var fileID = image.match(/[\w\_\-]{25,}/).toString();
+  var blob = DriveApp.getFileById(fileID).getBlob();
+  var next = body.findText(searchText);
+  if (!next) return;
+  var r = next.getElement();
+  r.asText().setText("");
+  var img = r.getParent().asParagraph().insertInlineImage(0, blob);
+  if (width && typeof width == "number") {
+    var w = img.getWidth();
+    var h = img.getHeight();
+    img.setWidth(width);
+    img.setHeight(width * h / w);
+  }
+  return;
+}
+
+function createDuplicateDocument(sourceId, name) {
+    var newFile = DriveApp.getFileById(sourceId).makeCopy(name);
+    //var targetFolder = DocsList.getFolderById(TARGET_FOLDER);
+    //newFile.addToFolder(targetFolder);
+    return DocumentApp.openById(newFile.getId());
+}
